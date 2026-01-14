@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: divvy_postgres
+    environment:
+      POSTGRES_USER: divvy
+      POSTGRES_PASSWORD: divvy_pw
+      POSTGRES_DB: divvy_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - divvy_pgdata:/var/lib/postgresql/data
+
+volumes:
+  divvy_pgdata:
