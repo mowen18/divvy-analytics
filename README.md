@@ -46,3 +46,19 @@ This project ingests Chicago Divvy trip data into Postgres, cleans it into a sta
   - Trips by hour
   - Average and median trip duration (minutes) by rider type
   - Top 20 start stations
+
+## Visuals
+
+These charts come from `notebooks/01_divvy_eda.ipynb` and summarize rider volume, mix, and trip duration trends from `analytics.mart_trips_daily`.
+
+### Trips Over Time by Rider Type
+
+![Trips Over Time by Rider Type](images/trips_over_time_by_rider_type.png)
+
+### Rider Type Share Over Time
+
+![Rider Type Share Over Time](images/rider_type_share_over_time.png)
+
+### Average Trip Minutes Over Time by Rider Type
+
+![Average Trip Minutes Over Time by Rider Type](images/avg_trip_minutes_over_time.png)
