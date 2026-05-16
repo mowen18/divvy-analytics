@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: divvy
+    schema: analytics
+    tables:
+      - name: stg_trips
+        description: Existing cleaned/staged Divvy trips table created by the original SQL pipeline.
