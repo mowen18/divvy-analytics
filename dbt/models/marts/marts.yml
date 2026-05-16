@@ -1,0 +1,53 @@
+version: 2
+
+models:
+  - name: mart_trips_daily
+    description: Daily Divvy trip metrics aggregated from the dbt staging model.
+    columns:
+      - name: trip_date
+        description: Calendar date of trip start.
+        tests:
+          - not_null
+          - unique
+
+      - name: total_trips
+        description: Total number of valid trips starting on this date.
+        tests:
+          - not_null
+
+      - name: member_trips
+        description: Number of trips by annual members.
+
+      - name: casual_trips
+        description: Number of trips by casual riders.
+
+      - name: avg_trip_duration_minutes
+        description: Average trip duration in minutes for valid trips on this date.
+  - name: mart_station_activity
+    description: Station-level trip start metrics aggregated from the dbt staging model.
+    columns:
+      - name: start_station_name
+        description: Name of the station where trips started.
+        tests:
+          - not_null
+          - unique
+
+      - name: trip_starts
+        description: Total number of trips that started at this station.
+        tests:
+          - not_null
+
+      - name: member_trip_starts
+        description: Number of member trips that started at this station.
+
+      - name: casual_trip_starts
+        description: Number of casual rider trips that started at this station.
+
+      - name: pct_of_all_trip_starts
+        description: Percentage of all station-based trip starts represented by this station.
+
+      - name: first_trip_started_at
+        description: First observed trip start timestamp for this station.
+
+      - name: last_trip_started_at
+        description: Last observed trip start timestamp for this station.

@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: stg_divvy_trips
+    description: dbt-managed staging model for cleaned Divvy trip records.
+    columns:
+      - name: ride_id
+        description: Unique identifier for each trip.
+        tests:
+          - not_null
+          - unique
+
+      - name: rideable_type
+        description: Type of bike/scooter used for the trip.
+
+      - name: started_at
+        description: Timestamp when the trip started.
+        tests:
+          - not_null
+
+      - name: ended_at
+        description: Timestamp when the trip ended.
+
+      - name: member_casual
+        description: Rider membership type.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['member', 'casual']
