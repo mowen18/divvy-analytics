@@ -19,6 +19,13 @@ analytics_dbt.mart_trips_daily
 analytics_dbt.mart_station_activity
 ```
 
+### dbt lineage graph
+
+The dbt docs lineage graph shows the dependency flow from the existing staged trip table into the dbt staging model and downstream marts.
+
+![dbt lineage graph](images/dbt_lineage_graph.png)
+
+
 ### dbt models
 
 - `stg_divvy_trips`: dbt staging view built from the existing `analytics.stg_trips` table.
