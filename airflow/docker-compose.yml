@@ -1,0 +1,27 @@
+services:
+  airflow:
+    build:
+      context: ..
+      dockerfile: airflow/Dockerfile
+    command: standalone
+    env_file:
+      - ../.env
+    environment:
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_WWW_USER_PASSWORD:-airflow}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5432/${POSTGRES_DB}
+      DBT_POSTGRES_HOST: host.docker.internal
+      DBT_POSTGRES_PORT: "5432"
+      DBT_PROFILES_DIR: /opt/divvy-analytics/airflow/dbt_profiles
+      DIVVY_PROJECT_DIR: /opt/divvy-analytics
+      DIVVY_PYTHON_BIN: python
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../:/opt/divvy-analytics
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
