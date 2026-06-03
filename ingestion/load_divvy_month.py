@@ -100,6 +100,13 @@ def copy_csv(conn, csv_path: Path, yyyymm: str, columns: list[str]) -> None:
                 f,
             )
 
+        print(f"Replacing existing rows for source_month={yyyymm}...")
+        cur.execute(
+            f"DELETE FROM {RAW_SCHEMA}.{RAW_TABLE} WHERE source_month = %s;",
+            (yyyymm,),
+        )
+        print(f"Deleted {cur.rowcount} existing rows for source_month={yyyymm}.")
+
         # Insert into landing table + tag with month
         cols_list = ", ".join([f'"{c}"' for c in columns])
         cur.execute(

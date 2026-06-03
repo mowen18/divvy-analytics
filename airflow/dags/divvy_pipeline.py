@@ -69,6 +69,21 @@ ls -lh "$CSV_PATH"
         bash_command=COMMON_BASH
         + r"""
 "$PYTHON_BIN" ingestion/load_divvy_month.py "$SOURCE_MONTH"
+""",
+    )
+
+    reset_dbt_schema = BashOperator(
+        task_id="reset_dbt_schema",
+        bash_command=COMMON_BASH
+        + r"""
+psql "$DATABASE_URL" -c "DROP SCHEMA IF EXISTS analytics_dbt CASCADE;"
+""",
+    )
+
+    run_sql_staging = BashOperator(
+        task_id="run_sql_staging",
+        bash_command=COMMON_BASH
+        + r"""
 psql "$DATABASE_URL" -f sql/00_init.sql
 psql "$DATABASE_URL" -f sql/10_stg_trips.sql
 """,
@@ -126,4 +141,12 @@ SQL
 """,
     )
 
-    check_raw_files >> load_raw_trips >> dbt_run >> dbt_test >> summarize_outputs
+    (
+        check_raw_files
+        >> load_raw_trips
+        >> reset_dbt_schema
+        >> run_sql_staging
+        >> dbt_run
+        >> dbt_test
+        >> summarize_outputs
+    )
