@@ -58,7 +58,7 @@ Open Airflow at [http://localhost:8080](http://localhost:8080).
 Default local login:
 
 ```text
-username: airflow
+username: admin
 password: airflow
 ```
 
@@ -72,7 +72,7 @@ In the Airflow UI, enable and trigger `divvy_pipeline`. To run a different month
 }
 ```
 
-You can also trigger it from inside the Airflow container:
+You can also trigger it from the `airflow/` folder:
 
 ```bash
 docker compose --env-file ../.env exec airflow airflow dags trigger divvy_pipeline \
