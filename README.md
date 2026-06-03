@@ -53,10 +53,14 @@ This project also includes a local Airflow extension for orchestrating the exist
 ```text
 check_raw_files
   → load_raw_trips
+  → reset_dbt_schema
+  → run_sql_staging
   → dbt_run
   → dbt_test
   → summarize_outputs
 ```
+
+The DAG is rerunnable for a selected `source_month`: raw ingestion replaces rows for that month, then Airflow resets and rebuilds downstream dbt objects before running dbt.
 
 To run it locally, start Postgres from the project root:
 

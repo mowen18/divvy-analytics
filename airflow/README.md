@@ -2,6 +2,8 @@
 
 This folder adds a small local Airflow layer around the existing Divvy workflow. It does not replace the current Python, Postgres, SQL, or dbt commands.
 
+The DAG is designed to be rerunnable for a selected `source_month` during local development. Raw ingestion replaces rows only for that month, and the DAG resets downstream dbt objects before rebuilding them. This is intended for local development and portfolio demonstration, not as a production-grade incremental pipeline.
+
 ## DAG
 
 `dags/divvy_pipeline.py` defines a manually triggered DAG named `divvy_pipeline`:
@@ -9,6 +11,8 @@ This folder adds a small local Airflow layer around the existing Divvy workflow.
 ```text
 check_raw_files
   >> load_raw_trips
+  >> reset_dbt_schema
+  >> run_sql_staging
   >> dbt_run
   >> dbt_test
   >> summarize_outputs
@@ -81,6 +85,7 @@ The tasks run the existing project commands from `/opt/divvy-analytics` inside t
 
 ```bash
 python ingestion/load_divvy_month.py "$source_month"
+psql "$DATABASE_URL" -c "DROP SCHEMA IF EXISTS analytics_dbt CASCADE;"
 psql "$DATABASE_URL" -f sql/00_init.sql
 psql "$DATABASE_URL" -f sql/10_stg_trips.sql
 cd dbt && dbt run
