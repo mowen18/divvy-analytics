@@ -2,7 +2,7 @@
 
 This project ingests Chicago Divvy trip data into Postgres, cleans it into a staging model, and builds analytical outputs for KPI exploration.
 
-The project now includes both the original SQL-based workflow and a newer dbt analytics layer for model dependencies, tests, and documentation.
+The project now includes the original SQL-based workflow, a newer dbt analytics layer for model dependencies, tests, and documentation, and a local Airflow orchestration extension.
 
 ## dbt Analytics Layer
 
@@ -45,6 +45,51 @@ dbt test
 dbt docs generate
 dbt docs serve
 ```
+
+## Airflow Orchestration
+
+This project also includes a local Airflow extension for orchestrating the existing Divvy pipeline. The DAG lives at `airflow/dags/divvy_pipeline.py` and coordinates the current Python ingestion, Postgres SQL, and dbt steps without replacing that workflow.
+
+```text
+check_raw_files
+  → load_raw_trips
+  → dbt_run
+  → dbt_test
+  → summarize_outputs
+```
+
+To run it locally, start Postgres from the project root:
+
+```bash
+docker compose up -d
+```
+
+Then start Airflow:
+
+```bash
+cd airflow
+docker compose --env-file ../.env up --build -d
+```
+
+Open `http://localhost:8080`, log in with `admin / airflow`, and trigger the `divvy_pipeline` DAG through the UI. You can also trigger it from the Airflow folder with:
+
+```bash
+docker compose --env-file ../.env exec airflow airflow dags trigger divvy_pipeline --conf '{"source_month":"202401"}'
+```
+
+To stop Airflow:
+
+```bash
+docker compose --env-file ../.env down
+```
+
+Then stop Postgres from the project root:
+
+```bash
+docker compose down
+```
+
+See `airflow/README.md` for more detailed Airflow setup and usage notes.
 
 ## How to run
 
