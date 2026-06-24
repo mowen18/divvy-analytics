@@ -6,7 +6,7 @@ The project now includes the original SQL-based workflow, a newer dbt analytics 
 
 ## dbt Analytics Layer
 
-This project includes a dbt Core workflow for transforming staged Divvy trip data into analytics-ready models.
+dbt Core workflow for transforming staged Divvy trip data into analytics-ready models.
 
 ### dbt model flow
 
@@ -48,7 +48,7 @@ dbt docs serve
 
 ## Airflow Orchestration
 
-This project also includes a local Airflow extension for orchestrating the existing Divvy pipeline. The DAG lives at `airflow/dags/divvy_pipeline.py` and coordinates the current Python ingestion, Postgres SQL, and dbt steps without replacing that workflow.
+Local Airflow extension for orchestrating the existing Divvy pipeline. The DAG lives at `airflow/dags/divvy_pipeline.py` and coordinates the current Python ingestion, Postgres SQL, and dbt steps without replacing that workflow.
 
 ```text
 check_raw_files
