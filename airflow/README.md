@@ -61,6 +61,8 @@ username: admin
 password: airflow
 ```
 
+The login is created on container start and survives container recreation. Override it by setting `AIRFLOW_WWW_USER_USERNAME` / `AIRFLOW_WWW_USER_PASSWORD` in the project `.env`.
+
 ## Trigger The DAG
 
 In the Airflow UI, enable and trigger `divvy_pipeline`. To run a different month, override the DAG parameter:

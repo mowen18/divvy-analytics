@@ -3,7 +3,25 @@ services:
     build:
       context: ..
       dockerfile: airflow/Dockerfile
-    command: standalone
+    # `airflow standalone` generates a random admin password when it creates
+    # the user itself, ignoring _AIRFLOW_WWW_USER_*. Create/reset the user
+    # before handing off so the documented login (admin/airflow by default,
+    # overridable via AIRFLOW_WWW_USER_* in .env) survives container
+    # recreation.
+    command:
+      - bash
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username "$${_AIRFLOW_WWW_USER_USERNAME}" \
+          --password "$${_AIRFLOW_WWW_USER_PASSWORD}" \
+          --firstname Admin --lastname User --role Admin \
+          --email admin@example.com
+        airflow users reset-password \
+          --username "$${_AIRFLOW_WWW_USER_USERNAME}" \
+          --password "$${_AIRFLOW_WWW_USER_PASSWORD}"
+        exec airflow standalone
     env_file:
       - ../.env
     environment:
