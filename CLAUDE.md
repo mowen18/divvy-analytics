@@ -19,11 +19,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A portfolio data pipeline that ingests Chicago Divvy bike-share trip data into Postgres and transforms it into analytics-ready models. The repo intentionally contains **two parallel transformation layers** plus an orchestration layer on top:
 
-1. **Original SQL pipeline** (`sql/`) — the first version, run by hand with `psql`.
-2. **dbt layer** (`dbt/`) — a newer analytics-engineering rebuild with model dependencies, tests, and docs, built on top of the SQL layer's output.
-3. **Airflow** (`airflow/`) — local orchestration that chains the Python ingestion, SQL layer, and dbt layer together into one rerunnable DAG.
+1. **Original SQL pipeline** (`sql/`) — the frozen first version, run by hand with `psql`. Fully decoupled from dbt: nothing depends on it.
+2. **dbt layer** (`dbt/`) — the analytics-engineering rebuild, sourcing directly from `raw.trips_raw` and owning the full flow: source (raw) → staging (view) → intermediate (incremental) → marts, processed one `source_month` at a time.
+3. **Airflow** (`airflow/`) — local orchestration that chains the Python ingestion and the dbt layer into one rerunnable DAG.
 
-The SQL layer is kept in place as a reference/legacy version — don't remove or "fix" it into the dbt layer; they're meant to coexist.
+The SQL layer is kept in place as a reference/legacy version — don't remove or "fix" it into the dbt layer; they're meant to coexist as independent implementations.
 
 ## Data Flow / Architecture
 
@@ -31,28 +31,37 @@ The SQL layer is kept in place as a reference/legacy version — don't remove or
 ingestion/load_divvy_month.py  (download zip → extract csv → COPY into Postgres)
         ↓
 raw.trips_raw                                  (raw landing table, all columns TEXT)
-        ↓ sql/10_stg_trips.sql
-analytics.stg_trips                            (cleaned, typed staging table — SQL layer)
         ↓ source() in dbt/models/sources/sources.yml
-analytics_dbt.stg_divvy_trips                  (dbt staging view, renames rider_type → member_casual)
-        ↓ ref()
-analytics_dbt.mart_trips_daily                 (daily trip metrics)
-analytics_dbt.mart_station_activity            (station-level metrics)
-        ↓ sql/30_mart_trips_daily.sql (SQL-layer equivalent, separate from dbt marts)
-analytics.mart_trips_daily
+analytics_dbt.stg_divvy_trips                  (staging view — source of truth for valid trips)
+        ↓ ref()   ← the only scan of raw, filtered to one source_month
+analytics_dbt.int_trips                        (incremental, trip grain, typed)
+        ↓ ref()                     ↓ ref()
+analytics_dbt.mart_trips_daily     analytics_dbt.int_station_activity_monthly
+(incremental, daily grain)         (incremental, month × station grain)
+                                          ↓ ref()
+                                   analytics_dbt.mart_station_activity (all-time rollup table)
+
+Legacy SQL layer (manual-only, fully decoupled — dbt does not read from it):
+raw.trips_raw → sql/10_stg_trips.sql → analytics.stg_trips
+             → sql/30_mart_trips_daily.sql → analytics.mart_trips_daily
 ```
 
-Key cleaning rules applied in `sql/10_stg_trips.sql` (the source of truth for what counts as a "valid" trip):
+Key cleaning rules applied in `dbt/models/staging/stg_divvy_trips.sql` (the source of truth for what counts as a "valid" trip; a faithful port of the legacy `sql/10_stg_trips.sql`):
 - `started_at` and `ended_at` must be non-null and `ended_at > started_at`.
 - Trip duration must be between 1 minute and 24 hours.
-- `rider_type` is normalized to lowercase `member`/`casual`, else NULL.
+- Rider type is normalized to lowercase `member`/`casual`, else NULL, exposed as `member_casual`.
+- `NULLIF(col, '')` is applied before every cast (casting `''` to timestamp errors in Postgres) — preserve this ordering.
+- The view must stay projections + row filters only (no aggregation/window/DISTINCT) so Postgres inlines it and pushes `int_trips`' `source_month` filter down to the raw scan.
 
-The Airflow DAG (`airflow/dags/divvy_pipeline.py`) reruns this whole flow per `source_month`:
+Incremental pattern: `int_trips`, `int_station_activity_monthly`, and `mart_trips_daily` are `incremental` with `delete+insert` (partition replace per `source_month` / `trip_date`), mirroring ingestion's per-month delete+insert. Incremental runs require `--vars '{"source_month": "YYYYMM"}'`; missing var fails with a clear error. First run / `--full-refresh` rebuilds all months and needs no var. `dbt compile`/`dbt docs generate` also need the var once the incremental tables exist. Grain determines strategy: the all-time `mart_station_activity` (global window pct, all-time min/max) can't be incremental, so it's a plain-table rollup over the monthly intermediate.
+
+The Airflow DAG (`airflow/dags/divvy_pipeline.py`) reruns this flow per `source_month`:
 ```
-check_raw_files >> load_raw_trips >> reset_dbt_schema >> run_sql_staging >> dbt_run >> dbt_test >> summarize_outputs
+check_raw_files >> load_raw_trips >> dbt_run >> dbt_test >> summarize_outputs
 ```
 - `load_raw_trips` deletes/replaces rows for that `source_month` only (rerunnable).
-- `reset_dbt_schema` drops the entire `analytics_dbt` schema before `dbt run` rebuilds it — dbt models are always fully rebuilt, not incremental.
+- `dbt_run` passes `--vars '{"source_month": "<month>"}'`; the incremental models delete+insert that month's partitions, so re-triggering a loaded month is idempotent.
+- A boolean `full_refresh` DAG param (default false) adds `--full-refresh` to rebuild the incremental models from scratch.
 
 ## Environment Setup
 
@@ -85,9 +94,10 @@ psql "$DATABASE_URL" -f sql/20_kpis.sql           # ad-hoc KPI queries (member v
 ### dbt layer (from `dbt/`)
 ```bash
 dbt debug
-dbt run
-dbt test
-dbt docs generate
+dbt run --full-refresh                            # first run / rebuild all months (no var needed)
+dbt run --vars '{"source_month": "202401"}'       # incremental: process one month
+dbt test                                          # no var needed
+dbt docs generate --vars '{"source_month": "202401"}'   # var needed once incremental tables exist
 dbt docs serve
 ```
 - Profile name is `divvy_analytics`, target `local`, schema `analytics_dbt` (see profile config — locally this is typically `~/.dbt/profiles.yml`; Airflow uses `airflow/dbt_profiles/profiles.yml`).

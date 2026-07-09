@@ -2,29 +2,51 @@ version: 2
 
 models:
   - name: stg_divvy_trips
-    description: dbt-managed staging model for cleaned Divvy trip records.
+    description: >
+      Staging view over raw.trips_raw and the source of truth for what counts
+      as a valid Divvy trip: NULLIF empty-string handling before every cast,
+      typed timestamps and coordinates, rider type normalized to
+      member/casual (else NULL) as member_casual, derived duration and date
+      columns, and validity filters (non-null start/end, ended_at >
+      started_at, duration between 1 minute and 24 hours). The cleaning logic
+      is a faithful port of the legacy sql/10_stg_trips.sql. This view must
+      remain projections and row filters only — no aggregation, window
+      functions, or DISTINCT — so Postgres can inline it and push the
+      source_month predicate from int_trips down to the raw.trips_raw scan.
+      Data tests live on int_trips, which materializes this view; downstream
+      models must ref int_trips, never this view.
     columns:
+      - name: source_month
+        description: Ingestion month tag (YYYYMM, text) passed through from raw.
       - name: ride_id
         description: Unique identifier for each trip.
-        tests:
-          - not_null
-          - unique
-
       - name: rideable_type
         description: Type of bike/scooter used for the trip.
-
       - name: started_at
         description: Timestamp when the trip started.
-        tests:
-          - not_null
-
       - name: ended_at
         description: Timestamp when the trip ended.
-
+      - name: start_station_name
+        description: Name of the station where the trip started.
+      - name: start_station_id
+        description: Identifier of the station where the trip started.
+      - name: end_station_name
+        description: Name of the station where the trip ended.
+      - name: end_station_id
+        description: Identifier of the station where the trip ended.
+      - name: start_lat
+        description: Latitude of the trip start.
+      - name: start_lng
+        description: Longitude of the trip start.
+      - name: end_lat
+        description: Latitude of the trip end.
+      - name: end_lng
+        description: Longitude of the trip end.
       - name: member_casual
-        description: Rider membership type.
-        tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ['member', 'casual']
+        description: Rider membership type, normalized to 'member'/'casual'; NULL when unknown.
+      - name: duration_seconds
+        description: Trip duration in seconds.
+      - name: started_date
+        description: Calendar date of the trip start.
+      - name: started_month
+        description: First day of the month the trip started in (derived from started_at).

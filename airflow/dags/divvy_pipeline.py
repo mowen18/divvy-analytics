@@ -45,6 +45,11 @@ with DAG(
             pattern=r"^\d{6}$",
             description="Divvy source month to load, formatted as YYYYMM.",
         ),
+        "full_refresh": Param(
+            False,
+            type="boolean",
+            description="Rebuild incremental dbt models from scratch (--full-refresh).",
+        ),
     },
 ) as dag:
     check_raw_files = BashOperator(
@@ -72,29 +77,13 @@ ls -lh "$CSV_PATH"
 """,
     )
 
-    reset_dbt_schema = BashOperator(
-        task_id="reset_dbt_schema",
-        bash_command=COMMON_BASH
-        + r"""
-psql "$DATABASE_URL" -c "DROP SCHEMA IF EXISTS analytics_dbt CASCADE;"
-""",
-    )
-
-    run_sql_staging = BashOperator(
-        task_id="run_sql_staging",
-        bash_command=COMMON_BASH
-        + r"""
-psql "$DATABASE_URL" -f sql/00_init.sql
-psql "$DATABASE_URL" -f sql/10_stg_trips.sql
-""",
-    )
-
     dbt_run = BashOperator(
         task_id="dbt_run",
         bash_command=COMMON_BASH
         + r"""
 cd "$PROJECT_DIR/dbt"
-dbt run
+FULL_REFRESH_FLAG="{{ '--full-refresh' if params.full_refresh else '' }}"
+dbt run --vars "{\"source_month\": \"$SOURCE_MONTH\"}" $FULL_REFRESH_FLAG
 """,
     )
 
@@ -144,8 +133,6 @@ SQL
     (
         check_raw_files
         >> load_raw_trips
-        >> reset_dbt_schema
-        >> run_sql_staging
         >> dbt_run
         >> dbt_test
         >> summarize_outputs

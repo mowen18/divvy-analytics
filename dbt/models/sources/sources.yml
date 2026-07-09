@@ -2,7 +2,26 @@ version: 2
 
 sources:
   - name: divvy
-    schema: analytics
+    schema: raw
+    description: Raw Divvy trip data landed by ingestion/load_divvy_month.py.
     tables:
-      - name: stg_trips
-        description: Existing cleaned/staged Divvy trips table created by the original SQL pipeline.
+      - name: trips_raw
+        description: >
+          Raw landing table for monthly Divvy trip CSVs. All columns are TEXT,
+          slugified from the CSV header by the ingestion script, plus a
+          source_month (YYYYMM) tag. Ingestion replaces rows per source_month
+          (delete+insert), making source_month the partition key for
+          month-based incremental processing downstream.
+        columns:
+          - name: source_month
+            description: Ingestion month tag (YYYYMM, text); the delete+insert unit.
+            tests:
+              - not_null
+          - name: ride_id
+            description: Raw ride identifier as text.
+            tests:
+              - not_null
+          - name: started_at
+            description: Raw trip start timestamp as text.
+            tests:
+              - not_null

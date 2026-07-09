@@ -2,7 +2,7 @@
 
 This folder adds a small local Airflow layer around the existing Divvy workflow. It does not replace the current Python, Postgres, SQL, or dbt commands.
 
-The DAG is designed to be rerunnable for a selected `source_month` during local development. Raw ingestion replaces rows only for that month, and the DAG resets downstream dbt objects before rebuilding them. This is intended for local development and portfolio demonstration, not as a production-grade incremental pipeline.
+The DAG is designed to be rerunnable for a selected `source_month` during local development. Raw ingestion replaces rows only for that month, and the dbt incremental models delete+insert the same month's partitions, so re-triggering an already-loaded month produces identical results. This is intended for local development and portfolio demonstration, not as a production-grade incremental pipeline.
 
 ## DAG
 
@@ -11,16 +11,15 @@ The DAG is designed to be rerunnable for a selected `source_month` during local 
 ```text
 check_raw_files
   >> load_raw_trips
-  >> reset_dbt_schema
-  >> run_sql_staging
   >> dbt_run
   >> dbt_test
   >> summarize_outputs
 ```
 
-The DAG accepts one parameter:
+The DAG accepts two parameters:
 
 - `source_month`: Divvy month in `YYYYMM` format. The default is `202401`.
+- `full_refresh`: boolean, default `false`. When `true`, `dbt_run` rebuilds the incremental dbt models from scratch with `--full-refresh`.
 
 ## Prerequisites
 
@@ -85,12 +84,11 @@ The tasks run the existing project commands from `/opt/divvy-analytics` inside t
 
 ```bash
 python ingestion/load_divvy_month.py "$source_month"
-psql "$DATABASE_URL" -c "DROP SCHEMA IF EXISTS analytics_dbt CASCADE;"
-psql "$DATABASE_URL" -f sql/00_init.sql
-psql "$DATABASE_URL" -f sql/10_stg_trips.sql
-cd dbt && dbt run
+cd dbt && dbt run --vars '{"source_month": "<source_month>"}'  # plus --full-refresh when the param is set
 cd dbt && dbt test
 ```
+
+The legacy SQL scripts (`sql/`) are no longer part of the DAG; they remain runnable manually as the frozen first version of the pipeline.
 
 The final task prints row counts and recent metrics from:
 

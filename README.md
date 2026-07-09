@@ -6,33 +6,44 @@ The project now includes the original SQL-based workflow, a newer dbt analytics 
 
 ## dbt Analytics Layer
 
-dbt Core workflow for transforming staged Divvy trip data into analytics-ready models.
+dbt Core workflow that owns the full transformation flow from the raw landing table to analytics-ready models: source (raw) → staging (view) → intermediate (incremental) → marts.
 
 ### dbt model flow
 
 ```text
-analytics.stg_trips
+raw.trips_raw  (source, all TEXT)
         ↓ source()
-analytics_dbt.stg_divvy_trips
-        ↓ ref()
-analytics_dbt.mart_trips_daily
-analytics_dbt.mart_station_activity
+analytics_dbt.stg_divvy_trips              (view — defines a valid trip)
+        ↓ ref()   ← the only scan of raw, filtered to one source_month
+analytics_dbt.int_trips                    (incremental, trip grain, typed)
+        ↓ ref()                     ↓ ref()
+analytics_dbt.mart_trips_daily     analytics_dbt.int_station_activity_monthly
+(incremental, daily grain)         (incremental, month × station grain)
+                                          ↓ ref()
+                                   analytics_dbt.mart_station_activity
+                                   (table, all-time rollup)
 ```
+
+Each monthly run touches only that month's data and scans `raw.trips_raw` exactly once, mirroring how ingestion replaces one `source_month` at a time. This demonstrates the scaling pattern used on large warehouses — at local data volumes the wall-clock savings are trivial.
 
 ### dbt lineage graph
 
-The dbt docs lineage graph shows the dependency flow from the existing staged trip table into the dbt staging model and downstream marts.
+The dbt docs lineage graph shows the dependency flow from the raw source through the staging view and intermediate models into the marts.
 
 ![dbt lineage graph](images/dbt_lineage_graph.png)
 
 
 ### dbt models
 
-- `stg_divvy_trips`: dbt staging view built from the existing `analytics.stg_trips` table.
-- `mart_trips_daily`: daily trip metrics including total trips, member trips, casual trips, and average trip duration.
-- `mart_station_activity`: station-level trip start metrics used for station concentration analysis.
+- `stg_divvy_trips`: staging view over `raw.trips_raw` and the source of truth for what counts as a valid trip (typed casts, `member`/`casual` normalization, 1-minute-to-24-hour validity filters). The cleaning logic is a faithful port of the legacy `sql/10_stg_trips.sql`.
+- `int_trips`: trip-grain incremental table that materializes the staging view one `source_month` at a time (delete+insert partition replace). It deliberately parallels the legacy `analytics.stg_trips` table — same architecture, now with lineage, tests, docs, and incremental loading. The only model that scans raw; key data tests (`ride_id`, `started_at`, `member_casual`) live here.
+- `int_station_activity_monthly`: station activity per `(source_month, start_station_name)`, incremental delete+insert.
+- `mart_trips_daily`: daily trip metrics, incremental on `trip_date`.
+- `mart_station_activity`: all-time station rollup table over the monthly intermediate, used for station concentration analysis.
 
-The original SQL files are kept as the first version of the pipeline, while the `dbt/` folder shows the newer analytics engineering workflow with model dependencies, tests, and documentation.
+Grain determines incremental strategy: the daily and month × station grains map cleanly onto month-sized batches, so those models are incremental; the all-time station mart needs global aggregates (a window percentage, all-time min/max), so it is rebuilt as a cheap rollup over the already-aggregated monthly intermediate.
+
+The original SQL files are kept as the frozen first version of the pipeline. The two layers are now fully independent: dbt reads `raw.trips_raw` directly, and the SQL scripts are run manually only.
 
 ### Common dbt commands
 
@@ -40,11 +51,14 @@ From the `dbt/` directory:
 
 ```bash
 dbt debug
-dbt run
+dbt run --full-refresh                            # first run / rebuild all months
+dbt run --vars '{"source_month": "202401"}'       # incremental: process one month
 dbt test
-dbt docs generate
+dbt docs generate --vars '{"source_month": "202401"}'
 dbt docs serve
 ```
+
+Incremental runs require the `source_month` var (`YYYYMM`); a missing var fails with a clear `Required var 'source_month'` error. `dbt parse` and `dbt test` never need it. `dbt compile` and `dbt docs generate` do need it once the incremental tables exist (any loaded month works — it only affects compiled SQL text). dbt also expects `raw.trips_raw` to exist: run ingestion at least once first.
 
 ## Airflow Orchestration
 
@@ -53,14 +67,12 @@ Local Airflow extension for orchestrating the existing Divvy pipeline. The DAG l
 ```text
 check_raw_files
   → load_raw_trips
-  → reset_dbt_schema
-  → run_sql_staging
   → dbt_run
   → dbt_test
   → summarize_outputs
 ```
 
-The DAG is rerunnable for a selected `source_month`: raw ingestion replaces rows for that month, then Airflow resets and rebuilds downstream dbt objects before running dbt.
+The DAG is rerunnable for a selected `source_month`: raw ingestion replaces rows for that month, and dbt's incremental models delete+insert the same month's partitions, so re-triggering an already-loaded month produces identical results. A boolean `full_refresh` parameter (default `false`) makes `dbt_run` rebuild the incremental models from scratch with `--full-refresh`. The legacy SQL scripts are no longer part of the DAG.
 
 To run it locally, start Postgres from the project root:
 
@@ -115,33 +127,34 @@ See `airflow/README.md` for more detailed Airflow setup and usage notes.
    python ingestion/load_divvy_month.py 202401
    ```
 
-4. Run the original SQL models:
+4. Run dbt models and tests (first run builds everything; later runs process one month incrementally):
 
    ```bash
+   cd dbt
+   dbt run --full-refresh
+   dbt run --vars '{"source_month": "202401"}'
+   dbt test
+   ```
+
+5. Optional: generate and view dbt docs:
+
+   ```bash
+   dbt docs generate --vars '{"source_month": "202401"}'
+   dbt docs serve
+   ```
+
+6. Optional (legacy reference): run the original SQL models — the dbt layer no longer depends on them:
+
+   ```bash
+   cd ..
    psql "$DATABASE_URL" -f sql/00_init.sql
    psql "$DATABASE_URL" -f sql/10_stg_trips.sql
    psql "$DATABASE_URL" -f sql/30_mart_trips_daily.sql
    ```
 
-5. Run dbt models and tests:
-
-   ```bash
-   cd dbt
-   dbt run
-   dbt test
-   ```
-
-6. Optional: generate and view dbt docs:
-
-   ```bash
-   dbt docs generate
-   dbt docs serve
-   ```
-
 7. Run KPI queries:
 
    ```bash
-   cd ..
    psql "$DATABASE_URL" -f sql/20_kpis.sql
    ```
 
@@ -162,16 +175,23 @@ See `airflow/README.md` for more detailed Airflow setup and usage notes.
 ### dbt models
 
 - `analytics_dbt.stg_divvy_trips`:
-  - dbt-managed staging view built from `analytics.stg_trips`.
-  - Standardizes the rider type column as `member_casual`.
-  - Includes dbt tests for key fields like `ride_id`, `started_at`, and `member_casual`.
+  - Staging view over `raw.trips_raw`; the source of truth for what counts as a valid trip.
+  - Typed casts, standardized `member_casual` rider type, derived duration and date fields.
+
+- `analytics_dbt.int_trips`:
+  - Trip-grain incremental table materializing the staging view one `source_month` at a time.
+  - Deliberately parallels the legacy `analytics.stg_trips` — same architecture, with lineage, tests, docs, and incremental loading.
+  - Carries the dbt tests for key fields like `ride_id`, `started_at`, and `member_casual`.
+
+- `analytics_dbt.int_station_activity_monthly`:
+  - Station activity per `(source_month, start_station_name)`, incremental.
 
 - `analytics_dbt.mart_trips_daily`:
-  - Daily trip metrics aggregated from the dbt staging model.
+  - Daily trip metrics, incremental on `trip_date`.
   - Includes total trips, member trips, casual trips, and average trip duration.
 
 - `analytics_dbt.mart_station_activity`:
-  - Station-level trip start metrics.
+  - All-time station-level trip start metrics rolled up from the monthly intermediate.
   - Supports station concentration and top-start-station analysis.
 
 ### KPI query set
