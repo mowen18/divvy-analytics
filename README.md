@@ -62,7 +62,7 @@ Incremental runs require the `source_month` var (`YYYYMM`); a missing var fails 
 
 ## Airflow Orchestration
 
-Local Airflow extension for orchestrating the existing Divvy pipeline. The DAG lives at `airflow/dags/divvy_pipeline.py` and coordinates the current Python ingestion, Postgres SQL, and dbt steps without replacing that workflow.
+Local Airflow extension for orchestrating the existing Divvy pipeline. The DAG lives at `airflow/dags/divvy_pipeline.py` and coordinates the current Python ingestion and dbt steps without replacing that workflow.
 
 ```text
 check_raw_files
