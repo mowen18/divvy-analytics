@@ -1,3 +1,10 @@
+{{ config(
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='trip_date',
+    on_schema_change='fail'
+) }}
+
 select
     date(started_at) as trip_date,
     count(*) as total_trips,
@@ -10,11 +17,10 @@ select
         2
     ) as avg_trip_duration_minutes
 
-from {{ ref('stg_divvy_trips') }}
+from {{ ref('int_trips') }}
 
-where started_at is not null
-  and ended_at is not null
-  and ended_at > started_at
+{% if is_incremental() %}
+where source_month = '{{ var("source_month") }}'
+{% endif %}
 
 group by 1
-order by 1

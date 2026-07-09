@@ -32,3 +32,37 @@ models:
           - accepted_values:
               arguments:
                 values: ['member', 'casual']
+
+  - name: int_station_activity_monthly
+    description: >
+      Station activity per (source_month, start_station_name), incremental
+      delete+insert on source_month. Grain determines incremental strategy:
+      the all-time station mart needs global aggregates (window percentages,
+      all-time min/max), which cannot be updated one month at a time — so the
+      monthly grain lives here incrementally, and mart_station_activity is a
+      cheap full rollup over this table.
+    tests:
+      - unique:
+          arguments:
+            column_name: "source_month || '|' || start_station_name"
+    columns:
+      - name: source_month
+        description: Ingestion month tag (YYYYMM, text); the partition-replace unit.
+        tests:
+          - not_null
+      - name: start_station_name
+        description: Name of the station where trips started.
+        tests:
+          - not_null
+      - name: trip_starts
+        description: Trips started at this station in this month.
+        tests:
+          - not_null
+      - name: member_trip_starts
+        description: Member trips started at this station in this month.
+      - name: casual_trip_starts
+        description: Casual trips started at this station in this month.
+      - name: first_trip_started_at
+        description: First trip start at this station within the month.
+      - name: last_trip_started_at
+        description: Last trip start at this station within the month.

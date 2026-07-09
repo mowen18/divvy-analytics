@@ -2,7 +2,12 @@ version: 2
 
 models:
   - name: mart_trips_daily
-    description: Daily Divvy trip metrics aggregated from the dbt staging model.
+    description: >
+      Daily Divvy trip metrics aggregated from int_trips. Incremental
+      delete+insert on trip_date: a monthly run recomputes only the dates in
+      that source_month's batch. Grain determines incremental strategy — a
+      daily grain maps cleanly onto month-sized batches, so this mart can be
+      incremental directly (unlike the all-time station mart).
     columns:
       - name: trip_date
         description: Calendar date of trip start.
@@ -24,7 +29,13 @@ models:
       - name: avg_trip_duration_minutes
         description: Average trip duration in minutes for valid trips on this date.
   - name: mart_station_activity
-    description: Station-level trip start metrics aggregated from the dbt staging model.
+    description: >
+      All-time station-level trip start metrics, rolled up from
+      int_station_activity_monthly. Stays a plain table: its global window
+      percentage and all-time min/max can't be updated one month at a time,
+      but the input is already month/station-aggregated, so the full rebuild
+      is cheap. Output schema is unchanged from the previous staging-based
+      version.
     columns:
       - name: start_station_name
         description: Name of the station where trips started.
