@@ -1,8 +1,8 @@
 # Divvy Analytics Portfolio Project
 
-This project ingests Chicago Divvy trip data into Postgres, cleans it into a staging model, and builds analytical outputs for KPI exploration.
+This project ingests Chicago Divvy bike-share trip data into Postgres and transforms it into analytics-ready models for KPI exploration.
 
-The project now includes the original SQL-based workflow, a newer dbt analytics layer for model dependencies, tests, and documentation, and a local Airflow orchestration extension.
+Transformations are owned by a dbt layer that sources directly from the raw landing table — source (raw) → staging view → incremental intermediates → marts — processing one `source_month` at a time. A local Airflow DAG chains the Python ingestion and dbt steps into a single rerunnable per-month pipeline, and the original hand-run SQL workflow is kept alongside as a frozen, fully decoupled legacy reference.
 
 ## dbt Analytics Layer
 
