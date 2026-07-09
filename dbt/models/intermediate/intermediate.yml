@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: int_trips
+    description: >
+      Trip-grain incremental table materializing stg_divvy_trips one
+      source_month at a time (delete+insert partition replace, mirroring
+      ingestion). Deliberately parallels the legacy analytics.stg_trips table
+      — same architecture, now with lineage, tests, docs, and incremental
+      loading. Data tests live here rather than on the staging view so they
+      scan the materialized table instead of re-casting raw text. Incremental
+      runs require the source_month var; a full refresh (or first run)
+      rebuilds all months and needs no var.
+    columns:
+      - name: source_month
+        description: Ingestion month tag (YYYYMM, text); the partition-replace unit.
+      - name: ride_id
+        description: Unique identifier for each trip.
+        tests:
+          - not_null
+          - unique
+      - name: started_at
+        description: Timestamp when the trip started.
+        tests:
+          - not_null
+      - name: member_casual
+        description: >
+          Rider membership type ('member'/'casual'). NULL when the raw value
+          is unknown — the cleaning rule allows this, so there is deliberately
+          no not_null test.
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['member', 'casual']

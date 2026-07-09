@@ -6,9 +6,16 @@ profile: divvy_analytics
 
 model-paths: ["models"]
 
+# Keep int_trips' pushed-down source_month filter indexed on the raw table
+# without touching the ingestion script.
+on-run-start:
+  - "create index if not exists idx_trips_raw_source_month on raw.trips_raw (source_month)"
+
 models:
   divvy_analytics:
     staging:
       +materialized: view
+    intermediate:
+      +materialized: incremental
     marts:
       +materialized: table
