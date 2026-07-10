@@ -51,6 +51,12 @@ models:
       unlike a calendar-month grain, which would need the mart_trips_daily
       cross-partition recompute. mart_station_activity is insensitive to the
       attribution because it aggregates each station across all months.
+
+      Note the cross-model consequence: mart_trips_daily attributes trips by
+      calendar started_at date, while these monthly buckets attribute by
+      source file — so comparing a month's trips across the two models will
+      differ by the spillover tail (up to ~387 trips/month in 202407-202506).
+      Both are correct, by two different definitions of month.
     tests:
       - unique:
           arguments:
