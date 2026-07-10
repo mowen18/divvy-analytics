@@ -4,10 +4,12 @@ models:
   - name: mart_trips_daily
     description: >
       Daily Divvy trip metrics aggregated from int_trips. Incremental
-      delete+insert on trip_date: a monthly run recomputes only the dates in
-      that source_month's batch. Grain determines incremental strategy — a
-      daily grain maps cleanly onto month-sized batches, so this mart can be
-      incremental directly (unlike the all-time station mart).
+      delete+insert on trip_date: a monthly run recomputes only the dates
+      touched by that source_month's batch, aggregating each date across all
+      source_months because a month's raw file can include trips that started
+      on the last day of the previous month. Grain determines incremental
+      strategy — a daily grain maps cleanly onto month-sized batches, so this
+      mart can be incremental directly (unlike the all-time station mart).
     columns:
       - name: trip_date
         description: Calendar date of trip start.

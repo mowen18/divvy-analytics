@@ -52,9 +52,9 @@ From the `dbt/` directory:
 ```bash
 dbt debug
 dbt run --full-refresh                            # first run / rebuild all months
-dbt run --vars '{"source_month": "202401"}'       # incremental: process one month
+dbt run --vars '{"source_month": "202506"}'       # incremental: process one month
 dbt test
-dbt docs generate --vars '{"source_month": "202401"}'
+dbt docs generate --vars '{"source_month": "202506"}'
 dbt docs serve
 ```
 
@@ -121,29 +121,35 @@ See `airflow/README.md` for more detailed Airflow setup and usage notes.
    source .venv/bin/activate
    ```
 
-3. Load data for a month, for example January 2024:
+3. Load data for a month, for example July 2024:
 
    ```bash
-   python ingestion/load_divvy_month.py 202401
+   python ingestion/load_divvy_month.py 202407
    ```
 
-4. Run dbt models and tests (first run builds everything; later runs process one month incrementally):
+4. Or backfill a range of months in one go (inclusive, loaded oldest first). The script checks that every zip exists and that each CSV header matches `raw.trips_raw` before loading anything, prints per-month row counts, and ends with a rows-per-month summary. `--dbt` follows the load with the one-shot `dbt run --full-refresh` and `dbt test`:
+
+   ```bash
+   python scripts/backfill_months.py 202407 202506 --dbt
+   ```
+
+5. Run dbt models and tests (first run builds everything; later runs process one month incrementally):
 
    ```bash
    cd dbt
    dbt run --full-refresh
-   dbt run --vars '{"source_month": "202401"}'
+   dbt run --vars '{"source_month": "202506"}'
    dbt test
    ```
 
-5. Optional: generate and view dbt docs:
+6. Optional: generate and view dbt docs:
 
    ```bash
-   dbt docs generate --vars '{"source_month": "202401"}'
+   dbt docs generate --vars '{"source_month": "202506"}'
    dbt docs serve
    ```
 
-6. Optional (legacy reference): run the original SQL models — the dbt layer no longer depends on them:
+7. Optional (legacy reference): run the original SQL models — the dbt layer no longer depends on them:
 
    ```bash
    cd ..
@@ -152,7 +158,7 @@ See `airflow/README.md` for more detailed Airflow setup and usage notes.
    psql "$DATABASE_URL" -f sql/30_mart_trips_daily.sql
    ```
 
-7. Run KPI queries:
+8. Run KPI queries:
 
    ```bash
    psql "$DATABASE_URL" -f sql/20_kpis.sql
@@ -207,7 +213,7 @@ The KPI query file `sql/20_kpis.sql` includes:
 
 ## Visuals
 
-These charts come from `notebooks/01_divvy_eda.ipynb` and summarize rider volume, rider mix, trip duration trends, and station activity.
+These charts come from `notebooks/01_divvy_eda.ipynb` and summarize rider volume, rider mix, trip duration trends, and station activity across the twelve months 2024-07 through 2025-06.
 
 ### Trips Over Time by Rider Type
 
