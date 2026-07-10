@@ -41,13 +41,33 @@ models:
       all-time min/max), which cannot be updated one month at a time — so the
       monthly grain lives here incrementally, and mart_station_activity is a
       cheap full rollup over this table.
+
+      The month here is the source-file tag, not the calendar month of
+      started_at: each raw monthly file carries a small tail of trips that
+      started on the previous month's last day (8-387 per month across
+      202407-202506, ~0.02% of trips), and those land in the following
+      bucket. Deliberate: the delete and the recompute then scope the same
+      self-contained partition, so single-month reruns are idempotent —
+      unlike a calendar-month grain, which would need the mart_trips_daily
+      cross-partition recompute. mart_station_activity is insensitive to the
+      attribution because it aggregates each station across all months.
+
+      Note the cross-model consequence: mart_trips_daily attributes trips by
+      calendar started_at date, while these monthly buckets attribute by
+      source file — so comparing a month's trips across the two models will
+      differ by the spillover tail (up to ~387 trips/month in 202407-202506).
+      Both are correct, by two different definitions of month.
     tests:
       - unique:
           arguments:
             column_name: "source_month || '|' || start_station_name"
     columns:
       - name: source_month
-        description: Ingestion month tag (YYYYMM, text); the partition-replace unit.
+        description: >
+          Ingestion month tag (YYYYMM, text); the partition-replace unit.
+          Reflects the source file, not the calendar month of started_at —
+          a station-month bucket can include trips that started on the last
+          day of the previous calendar month.
         tests:
           - not_null
       - name: start_station_name
