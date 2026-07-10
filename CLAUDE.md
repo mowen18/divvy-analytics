@@ -53,7 +53,7 @@ Key cleaning rules applied in `dbt/models/staging/stg_divvy_trips.sql` (the sour
 - `NULLIF(col, '')` is applied before every cast (casting `''` to timestamp errors in Postgres) — preserve this ordering.
 - The view must stay projections + row filters only (no aggregation/window/DISTINCT) so Postgres inlines it and pushes `int_trips`' `source_month` filter down to the raw scan.
 
-Incremental pattern: `int_trips`, `int_station_activity_monthly`, and `mart_trips_daily` are `incremental` with `delete+insert` (partition replace per `source_month` / `trip_date`), mirroring ingestion's per-month delete+insert. Incremental runs require `--vars '{"source_month": "YYYYMM"}'`; missing var fails with a clear error. First run / `--full-refresh` rebuilds all months and needs no var. `dbt compile`/`dbt docs generate` also need the var once the incremental tables exist. Grain determines strategy: the all-time `mart_station_activity` (global window pct, all-time min/max) can't be incremental, so it's a plain-table rollup over the monthly intermediate.
+Incremental pattern: `int_trips`, `int_station_activity_monthly`, and `mart_trips_daily` are `incremental` with `delete+insert` (partition replace per `source_month` / `trip_date`), mirroring ingestion's per-month delete+insert. Because a month's raw file can contain trips that started on the last day of the previous month, `mart_trips_daily` recomputes each affected `trip_date` from all source_months (not just the current one) — otherwise boundary dates would be replaced with partial counts. Incremental runs require `--vars '{"source_month": "YYYYMM"}'`; missing var fails with a clear error. First run / `--full-refresh` rebuilds all months and needs no var. `dbt compile`/`dbt docs generate` also need the var once the incremental tables exist. Grain determines strategy: the all-time `mart_station_activity` (global window pct, all-time min/max) can't be incremental, so it's a plain-table rollup over the monthly intermediate.
 
 The Airflow DAG (`airflow/dags/divvy_pipeline.py`) reruns this flow per `source_month`:
 ```
@@ -79,8 +79,10 @@ docker compose down
 
 ### Ingestion
 ```bash
-python ingestion/load_divvy_month.py 202401   # YYYYMM; downloads zip, extracts csv, loads into raw.trips_raw
+python ingestion/load_divvy_month.py 202407           # YYYYMM; downloads zip, extracts csv, loads into raw.trips_raw
+python scripts/backfill_months.py 202407 202506       # inclusive YYYYMM range, oldest first; add --dbt to follow with dbt run --full-refresh + dbt test
 ```
+The backfill script reuses the ingestion module's functions (it forks no logic); it preflights every zip URL and aborts before loading if a CSV header doesn't match `raw.trips_raw` (schema drift, checked in both directions).
 Raw column names are slugified from the CSV header, so `raw.trips_raw` schema is derived dynamically — check `ingestion/load_divvy_month.py` if columns ever change.
 
 ### SQL layer
