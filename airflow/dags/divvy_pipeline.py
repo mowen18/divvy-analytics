@@ -40,10 +40,13 @@ with DAG(
     tags=["divvy", "postgres", "dbt"],
     params={
         "source_month": Param(
-            "202401",
+            # Latest validated month of the 202407–202506 backfill. Updated by
+            # hand when a new month is validated — not auto-detected, by design
+            # (schedule=None, manually triggered pipeline).
+            "202506",
             type="string",
-            pattern=r"^\d{6}$",
-            description="Divvy source month to load, formatted as YYYYMM.",
+            pattern=r"^\d{4}(0[1-9]|1[0-2])$",
+            description="Divvy source-file month to ingest and process, formatted as YYYYMM.",
         ),
         "full_refresh": Param(
             False,
@@ -52,23 +55,6 @@ with DAG(
         ),
     },
 ) as dag:
-    check_raw_files = BashOperator(
-        task_id="check_raw_files",
-        bash_command=COMMON_BASH
-        + r"""
-CSV_PATH="$PROJECT_DIR/data/csv/${SOURCE_MONTH}-divvy-tripdata.csv"
-
-if [ ! -s "$CSV_PATH" ]; then
-  echo "Missing raw CSV: $CSV_PATH"
-  echo "Download or extract the Divvy CSV before triggering this DAG."
-  exit 1
-fi
-
-echo "Found raw CSV: $CSV_PATH"
-ls -lh "$CSV_PATH"
-""",
-    )
-
     load_raw_trips = BashOperator(
         task_id="load_raw_trips",
         bash_command=COMMON_BASH
@@ -131,8 +117,7 @@ SQL
     )
 
     (
-        check_raw_files
-        >> load_raw_trips
+        load_raw_trips
         >> dbt_run
         >> dbt_test
         >> summarize_outputs

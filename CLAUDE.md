@@ -57,9 +57,10 @@ Incremental pattern: `int_trips`, `int_station_activity_monthly`, and `mart_trip
 
 The Airflow DAG (`airflow/dags/divvy_pipeline.py`) reruns this flow per `source_month`:
 ```
-check_raw_files >> load_raw_trips >> dbt_run >> dbt_test >> summarize_outputs
+load_raw_trips >> dbt_run >> dbt_test >> summarize_outputs
 ```
-- `load_raw_trips` deletes/replaces rows for that `source_month` only (rerunnable).
+- `load_raw_trips` downloads the month's zip and extracts the CSV when they aren't already cached under `data/`, then deletes/replaces rows for that `source_month` only (rerunnable).
+- The default `source_month` is `202506` — the latest validated month of the 202407–202506 backfill, updated by hand when a new month is validated.
 - `dbt_run` passes `--vars '{"source_month": "<month>"}'`; the incremental models delete+insert that month's partitions, so re-triggering a loaded month is idempotent.
 - A boolean `full_refresh` DAG param (default false) adds `--full-refresh` to rebuild the incremental models from scratch.
 
@@ -97,24 +98,24 @@ psql "$DATABASE_URL" -f sql/20_kpis.sql           # ad-hoc KPI queries (member v
 ```bash
 dbt debug
 dbt run --full-refresh                            # first run / rebuild all months (no var needed)
-dbt run --vars '{"source_month": "202401"}'       # incremental: process one month
+dbt run --vars '{"source_month": "202506"}'       # incremental: process one month
 dbt test                                          # no var needed
-dbt docs generate --vars '{"source_month": "202401"}'   # var needed once incremental tables exist
+dbt docs generate --vars '{"source_month": "202506"}'   # var needed once incremental tables exist
 dbt docs serve
 ```
-- Profile name is `divvy_analytics`, target `local`, schema `analytics_dbt` (see profile config — locally this is typically `~/.dbt/profiles.yml`; Airflow uses `airflow/dbt_profiles/profiles.yml`).
-- dbt connection vars come from the same Postgres env vars (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, plus `DBT_POSTGRES_HOST`/`DBT_POSTGRES_PORT`, defaulting to `localhost:5432`).
+- Profile name is `divvy_analytics`, schema `analytics_dbt`. The local profile (typically `~/.dbt/profiles.yml`) uses target `dev` with hardcoded connection values; the Airflow container uses `airflow/dbt_profiles/profiles.yml` with target `local`.
+- In the Airflow profile, dbt connection vars come from the same Postgres env vars (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, plus `DBT_POSTGRES_HOST`/`DBT_POSTGRES_PORT`, defaulting to `localhost:5432`); the local profile hardcodes its values.
 - Staging models materialize as views, marts as tables (`dbt/dbt_project.yml`).
 
 ### Airflow (from `airflow/`)
 ```bash
 docker compose --env-file ../.env up --build -d   # requires Postgres already running (docker compose up -d from root)
-docker compose --env-file ../.env exec airflow airflow dags trigger divvy_pipeline --conf '{"source_month":"202401"}'
+docker compose --env-file ../.env exec airflow airflow dags trigger divvy_pipeline --conf '{"source_month":"202506"}'
 docker compose --env-file ../.env down
 ```
 - UI at `http://localhost:8080`, login `admin` / `airflow`.
 - The Airflow container mounts the whole project at `/opt/divvy-analytics` and runs project commands (psql, dbt, the ingestion script) directly using that checkout — Airflow tasks are thin wrappers around the same commands listed above, not a separate implementation.
-- Requires `data/csv/<source_month>-divvy-tripdata.csv` to already exist before triggering (the `check_raw_files` task fails fast otherwise).
+- No local CSV is needed before triggering: `load_raw_trips` downloads and extracts the month's file when it isn't already cached under `data/`.
 
 ## Notebooks
 

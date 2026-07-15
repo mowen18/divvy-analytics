@@ -24,12 +24,17 @@ def download_zip(yyyymm: str, out_dir: Path) -> Path:
 
     url = f"{BASE_URL}/{yyyymm}-divvy-tripdata.zip"
     print(f"Downloading: {url}")
+    # Stream to a .part file and rename on success, so an interrupted
+    # download never leaves a partial zip at the final path (which the
+    # reuse check above would trust on the next run).
+    part_path = zip_path.with_suffix(".zip.part")
     with requests.get(url, stream=True, timeout=60) as r:
         r.raise_for_status()
-        with open(zip_path, "wb") as f:
+        with open(part_path, "wb") as f:
             for chunk in r.iter_content(chunk_size=1024 * 1024):
                 if chunk:
                     f.write(chunk)
+    part_path.replace(zip_path)
     print(f"Saved: {zip_path}")
     return zip_path
 

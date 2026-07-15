@@ -9,8 +9,7 @@ The DAG is designed to be rerunnable for a selected `source_month` during local 
 `dags/divvy_pipeline.py` defines a manually triggered DAG named `divvy_pipeline`:
 
 ```text
-check_raw_files
-  >> load_raw_trips
+load_raw_trips
   >> dbt_run
   >> dbt_test
   >> summarize_outputs
@@ -18,7 +17,7 @@ check_raw_files
 
 The DAG accepts two parameters:
 
-- `source_month`: Divvy month in `YYYYMM` format. The default is `202401`.
+- `source_month`: Divvy source-file month in `YYYYMM` format. The default is `202506`, the latest validated month of the local backfill (202407–202506).
 - `full_refresh`: boolean, default `false`. When `true`, `dbt_run` rebuilds the incremental dbt models from scratch with `--full-refresh`.
 
 ## Prerequisites
@@ -38,11 +37,7 @@ POSTGRES_DB=...
 DATABASE_URL=postgresql://...@localhost:5432/...
 ```
 
-Confirm the raw Divvy CSV exists for the month you want to run:
-
-```bash
-ls -lh data/csv/202401-divvy-tripdata.csv
-```
+The raw Divvy CSV does not need to exist beforehand: the `load_raw_trips` task downloads the month's zip and extracts the CSV when they aren't already cached under `data/`.
 
 ## Start Airflow
 
@@ -69,7 +64,7 @@ In the Airflow UI, enable and trigger `divvy_pipeline`. To run a different month
 
 ```json
 {
-  "source_month": "202402"
+  "source_month": "202412"
 }
 ```
 
@@ -77,7 +72,7 @@ You can also trigger it from the `airflow/` folder:
 
 ```bash
 docker compose --env-file ../.env exec airflow airflow dags trigger divvy_pipeline \
-  --conf '{"source_month":"202401"}'
+  --conf '{"source_month":"202506"}'
 ```
 
 ## What Airflow Runs
