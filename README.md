@@ -65,14 +65,13 @@ Incremental runs require the `source_month` var (`YYYYMM`); a missing var fails 
 Local Airflow extension for orchestrating the existing Divvy pipeline. The DAG lives at `airflow/dags/divvy_pipeline.py` and coordinates the current Python ingestion and dbt steps without replacing that workflow.
 
 ```text
-check_raw_files
-  → load_raw_trips
+load_raw_trips
   → dbt_run
   → dbt_test
   → summarize_outputs
 ```
 
-The DAG is rerunnable for a selected `source_month`: raw ingestion replaces rows for that month, and dbt's incremental models delete+insert the same month's partitions, so re-triggering an already-loaded month produces identical results. A boolean `full_refresh` parameter (default `false`) makes `dbt_run` rebuild the incremental models from scratch with `--full-refresh`. The legacy SQL scripts are no longer part of the DAG.
+The DAG is rerunnable for a selected `source_month`: `load_raw_trips` downloads and extracts the month's file when it isn't already cached under `data/`, raw ingestion replaces rows for that month, and dbt's incremental models delete+insert the same month's partitions, so re-triggering an already-loaded month produces identical results. The default `source_month` is `202506`, the latest validated month of the local backfill (202407–202506). A boolean `full_refresh` parameter (default `false`) makes `dbt_run` rebuild the incremental models from scratch with `--full-refresh`. The legacy SQL scripts are no longer part of the DAG.
 
 To run it locally, start Postgres from the project root:
 
@@ -90,7 +89,7 @@ docker compose --env-file ../.env up --build -d
 Open `http://localhost:8080`, log in with `admin / airflow`, and trigger the `divvy_pipeline` DAG through the UI. You can also trigger it from the Airflow folder with:
 
 ```bash
-docker compose --env-file ../.env exec airflow airflow dags trigger divvy_pipeline --conf '{"source_month":"202401"}'
+docker compose --env-file ../.env exec airflow airflow dags trigger divvy_pipeline --conf '{"source_month":"202506"}'
 ```
 
 To stop Airflow:
