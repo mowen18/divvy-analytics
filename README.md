@@ -212,7 +212,7 @@ The KPI query file `sql/20_kpis.sql` includes:
 
 ## Visuals
 
-These charts come from `notebooks/01_divvy_eda.ipynb` and summarize rider volume, rider mix, trip duration trends, and station activity across the twelve months 2024-07 through 2025-06.
+These charts come from `notebooks/01_divvy_eda.ipynb` and summarize rider volume, rider mix, trip duration trends, and station activity. The daily charts cover full days 2024-07-01 through 2025-06-30: the loaded files also contain a partial 2024-06-30 (only the 179 rides that crossed midnight into July — heavily long-ride biased), which is excluded from the charts so a spillover-only day doesn't distort the trends. The data itself keeps that day, correctly attributed by calendar date.
 
 ### Trips Over Time by Rider Type
 

@@ -42,11 +42,19 @@ def download_zip(yyyymm: str, out_dir: Path) -> Path:
 def extract_csv(zip_path: Path, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(zip_path, "r") as z:
-        csv_names = [n for n in z.namelist() if n.lower().endswith(".csv")]
+        # Divvy zips ship macOS metadata entries (__MACOSX/._foo.csv) that
+        # also end in .csv — skip those and hidden files before selecting.
+        csv_names = [
+            n
+            for n in z.namelist()
+            if n.lower().endswith(".csv")
+            and "__MACOSX" not in Path(n).parts
+            and not Path(n).name.startswith(".")
+        ]
         if not csv_names:
             raise ValueError("No CSV found in zip.")
         if len(csv_names) > 1:
-            print(f"Multiple CSVs found, using first: {csv_names[0]}")
+            raise ValueError(f"Multiple CSVs found in zip, refusing to guess: {csv_names}")
         csv_name = csv_names[0]
         target = out_dir / Path(csv_name).name
         if target.exists():
