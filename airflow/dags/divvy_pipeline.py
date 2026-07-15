@@ -40,10 +40,13 @@ with DAG(
     tags=["divvy", "postgres", "dbt"],
     params={
         "source_month": Param(
-            "202401",
+            # Latest validated month of the 202407–202506 backfill. Updated by
+            # hand when a new month is validated — not auto-detected, by design
+            # (schedule=None, manually triggered pipeline).
+            "202506",
             type="string",
-            pattern=r"^\d{6}$",
-            description="Divvy source month to load, formatted as YYYYMM.",
+            pattern=r"^\d{4}(0[1-9]|1[0-2])$",
+            description="Divvy source-file month to ingest and process, formatted as YYYYMM.",
         ),
         "full_refresh": Param(
             False,
